@@ -14,60 +14,66 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python 3.12
+      - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install mlflow==${{ env.MLFLOW_VERSION }} \
             scikit-learn pandas numpy matplotlib seaborn
 
-      - name: 🚀 Run MLflow Project
+      - name: Run MLflow Project
         run: |
           mlflow run MLProject/ --env-manager=local \
             --experiment-name "Heart Disease - CI"
 
-      - name: 📊 Upload MLflow artifacts
+      - name: Show MLflow run info
+        run: |
+          python -c "
+          import mlflow
+          client = mlflow.MlflowClient()
+          exp = client.get_experiment_by_name('Heart Disease - CI')
+          runs = client.search_runs(exp.experiment_id, order_by=['start_time DESC'], max_results=1)
+          r = runs[0]
+          print(f'Run ID   : {r.info.run_id}')
+          print(f'Status   : {r.info.status}')
+          print(f'Accuracy : {r.data.metrics.get(\"accuracy\", \"N/A\")}')
+          print(f'F1 Score : {r.data.metrics.get(\"f1_score\", \"N/A\")}')
+          "
+
+      - name: Upload MLflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-artifacts
           path: mlruns/
           retention-days: 30
 
-      - name: 🔑 Login to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 🐳 Build Docker image with MLflow
+      - name: Build Docker image (custom Dockerfile)
         run: |
-          # Ambil run_id terbaru dari MLflow experiment
-          RUN_ID=$(python -c "
-          import mlflow
-          client = mlflow.MlflowClient()
-          exp = client.get_experiment_by_name('Heart Disease - CI')
-          runs = client.search_runs(exp.experiment_id, order_by=['start_time DESC'], max_results=1)
-          print(runs[0].info.run_id)
-          ")
-          echo "Using run_id: $RUN_ID"
-          mlflow models build-docker \
-            -m "runs:/$RUN_ID/model" \
-            -n "${{ env.DOCKER_IMAGE }}" \
-            --env-manager local
+          docker build \
+            --build-arg MLFLOW_VERSION=${{ env.MLFLOW_VERSION }} \
+            -t ${{ env.DOCKER_IMAGE }}:latest \
+            -f Dockerfile \
+            .
 
-      - name: 🚢 Push Docker image to Docker Hub
+      - name: Push Docker image to Docker Hub
         run: |
           docker push ${{ env.DOCKER_IMAGE }}:latest
 
-      - name: ✅ Summary
+      - name: Summary
         run: |
-          echo "### ✅ CI Pipeline Selesai" >> $GITHUB_STEP_SUMMARY
+          echo "### CI Pipeline Selesai" >> $GITHUB_STEP_SUMMARY
           echo "- MLflow run berhasil dijalankan" >> $GITHUB_STEP_SUMMARY
           echo "- Docker image berhasil di-push ke: \`${{ env.DOCKER_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
