@@ -30,7 +30,6 @@ jobs:
 
       - name: 🚀 Run MLflow Project
         run: |
-          cd Workflow-CI
           mlflow run MLProject/ --env-manager=local \
             --experiment-name "Heart Disease - CI"
 
@@ -38,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-artifacts
-          path: Workflow-CI/mlruns/
+          path: mlruns/
           retention-days: 30
 
       - name: 🔑 Login to Docker Hub
@@ -49,7 +48,6 @@ jobs:
 
       - name: 🐳 Build Docker image with MLflow
         run: |
-          cd Workflow-CI
           # Ambil run_id terbaru dari MLflow experiment
           RUN_ID=$(python -c "
           import mlflow
